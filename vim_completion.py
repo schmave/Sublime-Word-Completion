@@ -18,7 +18,6 @@ last_search_pos = None
 
 def complete_word(view, edit, do_previous):
     global last_initial_pos, last_word_at_ipos, last_search_pos
-
     initial_word_region = view.word(view.sel()[0])
     word = view.substr(initial_word_region)
 
@@ -34,16 +33,18 @@ def complete_word(view, edit, do_previous):
         last_initial_pos = initial_word_region.a
         last_word_at_ipos = word
 
-    position += -1 if do_previous else 1
+    if (do_previous and position > 0) or (not do_previous and position < view.size()):
+        position += -1 if do_previous else 1
 
     print("word: %s; position: %d" % (word, position))
 
     size_checked = 0
-    while size_checked < 5000:
+    match_found = False
+    while (size_checked < 5000 and not match_found and position >= 0 and
+           position <= view.size()):
         compare_word_region = view.word(position)
         compare_word = view.substr(compare_word_region)
 
-        match_found = False
         # Found a match; replace current word
         if compare_word.startswith(word):
             view.replace(edit, initial_word_region, compare_word)
@@ -55,8 +56,6 @@ def complete_word(view, edit, do_previous):
             position = compare_word_region.end() + 1
 
         size_checked += compare_word_region.size()
-        if match_found or position == -1 or position > view.size():
-            break
 
     last_search_pos = position
 
