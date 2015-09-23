@@ -3,7 +3,6 @@
 
 # Things still to do:
 #   complete more
-#   highlight matched word in the view
 #   only complete unique (maybe make this an option? could be annoying with complete more)
 
 import sublime
@@ -15,9 +14,13 @@ last_word_at_ipos = None
 
 last_search_pos = None
 
+REGION_KEY = 'VimCompletion'
+DRAW_FLAGS = sublime.DRAW_NO_FILL | sublime.DRAW_NO_OUTLINE | sublime.DRAW_SOLID_UNDERLINE
 
 def complete_word(view, edit, do_previous):
     global last_initial_pos, last_word_at_ipos, last_search_pos
+
+    view.erase_regions(REGION_KEY)
 
     # Compute the region from the beginning of the word containing the cursor
     # through the cursor.
@@ -54,6 +57,8 @@ def complete_word(view, edit, do_previous):
         if compare_word.startswith(word) and compare_word_region.a != view.word(view.sel()[0]).a:
             # replace word
             view.replace(edit, initial_word_region, compare_word)
+            view.add_regions(REGION_KEY, [compare_word_region], "error", "", DRAW_FLAGS)
+
             match_found = True
 
         if do_previous:
@@ -66,7 +71,7 @@ def complete_word(view, edit, do_previous):
     if match_found:
         sublime.status_message(
             "Completion line: %s" %
-            view.substr(view.line(sublime.Region(position, position))))
+            view.substr(view.line(sublime.Region(compare_word_region.a, compare_word_region.a))))
     else:
         sublime.status_message("No completion found")
 
