@@ -24,21 +24,25 @@ last_search_pos = None
 # True iff the most recent search was in the 'previous' direction
 last_search_was_previous = None
 
+# The location of the next text to copy for "complete more"
+complete_more_pos = None
+
 REGION_KEY = 'VimCompletion'
 DRAW_FLAGS = sublime.DRAW_NO_FILL | sublime.DRAW_NO_OUTLINE | sublime.DRAW_SOLID_UNDERLINE
 
 def complete_word(view, edit, do_previous):
-    global last_initial_pos, last_word_at_ipos, last_search_pos, last_view, last_search_was_previous
+    global last_initial_pos, last_word_at_ipos, last_search_pos, last_view,\
+           last_search_was_previous, complete_more_pos
 
     view.erase_regions(REGION_KEY)
 
     # Compute the region from the beginning of the word containing the cursor
     # through the cursor.
     initial_word_region = view.word(view.sel()[0])
-    initial_word_region = sublime.Region(initial_word_region.a, view.sel()[0].a)
+    initial_word_region = sublime.Region(initial_word_region.begin(), view.sel()[0].begin())
     word = view.substr(initial_word_region)
 
-    if (last_view == view and initial_word_region.a == last_initial_pos and
+    if (last_view == view and initial_word_region.begin() == last_initial_pos and
             last_word_at_ipos is not None and
             word.startswith(last_word_at_ipos) and last_search_pos is not None):
         # Continue at previous search position with previous search prefix
@@ -57,7 +61,7 @@ def complete_word(view, edit, do_previous):
             position = initial_word_region.begin()
         else:
             position = initial_word_region.end()
-        last_initial_pos = initial_word_region.a
+        last_initial_pos = initial_word_region.begin()
         last_word_at_ipos = word
         last_view = view
 
@@ -67,28 +71,37 @@ def complete_word(view, edit, do_previous):
     # sublime.status_message("word: %s; position: %d" % (word, position))
 
     match_found = False
-    while not match_found and position >= 0 and position <= view.size():
+    count = 0
+    while not match_found and position >= 0 and position <= view.size() and count < 100000:
+        count += 1
         compare_word_region = view.word(position)
         compare_word = view.substr(compare_word_region)
 
         # If we find a word that starts with the proper prefix, it's a match!
         # But don't count it if we have just found our starting place.
-        if compare_word.startswith(word) and compare_word_region.a != view.word(view.sel()[0]).a:
+        num_chars_added = 0
+        if compare_word.startswith(word) and compare_word_region.begin() != view.word(view.sel()[0]).begin():
             # replace word
             view.replace(edit, initial_word_region, compare_word)
+            num_chars_added = compare_word_region.size() - initial_word_region.size()
             view.add_regions(REGION_KEY, [compare_word_region], "error", "", DRAW_FLAGS)
 
             match_found = True
 
+        adjustment = 0
+        if position > initial_word_region.begin():
+            adjustment = num_chars_added
+
         if do_previous:
-            position = compare_word_region.begin() - 1
+            position = compare_word_region.begin() + adjustment - 1
         else:
-            position = compare_word_region.end() + 1
+            position = compare_word_region.end() + adjustment + 1
+        complete_more_pos = compare_word_region.end() + adjustment
 
     if match_found:
         sublime.status_message(
             "Completion line: %s" %
-            view.substr(view.line(sublime.Region(compare_word_region.a, compare_word_region.a))))
+            view.substr(view.line(sublime.Region(compare_word_region.begin(), compare_word_region.begin()))))
     else:
         sublime.status_message("No completion found")
 
@@ -105,7 +118,52 @@ class CompleteNextWordCommand(sublime_plugin.TextCommand):
     def run(self, edit):
         complete_word(self.view, edit, False)
 
-
 class CompleteMoreCommand(sublime_plugin.TextCommand):
     def run(self, edit):
-        pass
+        global last_initial_pos, last_word_at_ipos, last_search_pos, last_view,\
+                last_search_was_previous, complete_more_pos
+
+        view = self.view
+
+        if last_initial_pos:
+            print("starting complete more, last initial pos %d" % last_initial_pos)
+
+        if not complete_more_pos:
+            return
+
+        last_initial_pos = last_word_at_ipos = last_search_pos = None
+        last_view = last_search_was_previous = None
+
+        cur_pos = view.sel()[0].begin()
+        print("character to right of complete_more_pos: %r, class %d" % (
+            view.substr(complete_more_pos), view.classify(complete_more_pos)))
+
+        punctuation_copied = False
+        count = 0
+        while count < 5 and (
+                (view.classify(complete_more_pos) & sublime.CLASS_PUNCTUATION_START)):
+            print("class %d %d" % (
+                view.classify(complete_more_pos), sublime.CLASS_PUNCTUATION_START))
+            count += 1
+            punctuation_copied = True
+            view.insert(edit, cur_pos, view.substr(complete_more_pos))
+            cur_pos += 1
+            complete_more_pos += 1 if complete_more_pos < cur_pos else 2
+
+        if punctuation_copied:
+            return
+
+        word_region = view.word(complete_more_pos)
+        # print("word region start %d word region end %d" % (word_region.begin(), word_region.end()))
+        text = view.substr(word_region)
+        print("next word to complete %r" % (text))
+        num_inserted = view.insert(edit, cur_pos, text)
+
+        complete_more_pos = word_region.end()
+        # If we are copying from an area after the cursor, we need to add
+        # an additional amount to compensate for the fact that inserting text
+        # changes the index of all text after the insertion point.
+        if complete_more_pos > cur_pos:
+            complete_more_pos += num_inserted
+
+        # print ("new complete more pos %d" % complete_more_pos)
