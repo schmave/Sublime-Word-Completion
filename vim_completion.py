@@ -4,13 +4,13 @@
 # Things still to do:
 #   only complete unique (maybe make this an option? could be annoying with complete more)
 #   complete from other open buffers, MRU first
-#   detect if user typing has occurred since last completion (last modified time or text at cursor?)
 
 import sublime
 import sublime_plugin
 
 # The view that we searched in last
 last_view = None
+last_view_change_count = None  # the view's change count as of the last complete_word
 
 # The location of the beginning of the prefix that was last searched for
 last_initial_pos = None
@@ -33,7 +33,7 @@ DRAW_FLAGS = sublime.DRAW_NO_FILL | sublime.DRAW_NO_OUTLINE | sublime.DRAW_SOLID
 
 def complete_word(view, edit, do_previous):
     global last_initial_pos, last_word_at_ipos, last_search_pos, last_view,\
-           last_search_was_previous, complete_more_pos
+           last_search_was_previous, complete_more_pos, last_view_change_count
 
     view.erase_regions(REGION_KEY)
 
@@ -45,7 +45,8 @@ def complete_word(view, edit, do_previous):
 
     if (last_view == view and initial_word_region.begin() == last_initial_pos and
             last_word_at_ipos is not None and
-            word.startswith(last_word_at_ipos) and last_search_pos is not None):
+            word.startswith(last_word_at_ipos) and last_search_pos is not None and
+            view.change_count() == last_view_change_count):
         # Continue at previous search position with previous search prefix
         position = last_search_pos
         word = last_word_at_ipos
@@ -108,6 +109,7 @@ def complete_word(view, edit, do_previous):
 
     last_search_pos = position
     last_search_was_previous = do_previous
+    last_view_change_count = view.change_count()
 
 
 class CompletePreviousWordCommand(sublime_plugin.TextCommand):
