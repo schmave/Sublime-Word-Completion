@@ -19,6 +19,5 @@ Install this plugin with the excellent [Package Control](https://packagecontrol.
 
 ### Installing the hard way
 
-To install, download the code, move the VimCompletion
-folder into ~/Library/Application Support/Sublime Text 3/Packages/, and add some key bindings like so:
-
+Download the code from github, move the entire folder into ~/Library/Application
+Support/Sublime Text 3/Packages/, and setup the keybindings from above.
