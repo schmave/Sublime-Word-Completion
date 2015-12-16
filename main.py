@@ -7,6 +7,7 @@
 
 import sublime
 import sublime_plugin
+import time
 
 # The view that we searched in last
 last_view = None
@@ -29,6 +30,20 @@ complete_more_pos = None
 
 REGION_KEY = 'VimCompletion'
 DRAW_FLAGS = sublime.DRAW_NO_FILL | sublime.DRAW_NO_OUTLINE | sublime.DRAW_SOLID_UNDERLINE
+MAX_SECONDS_TO_HIGHLIGHT = 3
+
+# A dictionary from view ID to the time.time() stamp when a match was last
+# underlined in it.
+last_match_time_for_view = {}
+
+
+def maybe_erase_regions(view):
+    if view.id() not in last_match_time_for_view:
+        return
+
+    now = time.time()
+    if now - last_match_time_for_view[view.id()] > MAX_SECONDS_TO_HIGHLIGHT:
+        view.erase_regions(REGION_KEY)
 
 
 def complete_word(view, edit, do_previous):
@@ -82,8 +97,13 @@ def complete_word(view, edit, do_previous):
         # If we find a word that starts with the proper prefix, it's a match!
         # But don't count it if we have just found our starting place.
         num_chars_added = 0
-        if compare_word.startswith(word) and compare_word_region.begin() != view.word(view.sel()[0]).begin():
+        if (compare_word.startswith(word) and
+                compare_word_region.begin() != view.word(view.sel()[0]).begin()):
+            # underline the matched word for MAX_SECONDS_TO_HIGHLIGHT seconds
             view.add_regions(REGION_KEY, [compare_word_region], "error", "", DRAW_FLAGS)
+            last_match_time_for_view[view.id()] = time.time()
+            sublime.set_timeout(lambda: maybe_erase_regions(view),
+                                MAX_SECONDS_TO_HIGHLIGHT * 1000 + 500)
             # replace word
             view.replace(edit, initial_word_region, compare_word)
             num_chars_added = compare_word_region.size() - initial_word_region.size()
@@ -103,7 +123,8 @@ def complete_word(view, edit, do_previous):
     if match_found:
         sublime.status_message(
             "Completion line: %s" %
-            view.substr(view.line(sublime.Region(compare_word_region.begin(), compare_word_region.begin()))))
+            view.substr(view.line(sublime.Region(
+                compare_word_region.begin(), compare_word_region.begin()))))
     else:
         sublime.status_message("No completion found")
 
