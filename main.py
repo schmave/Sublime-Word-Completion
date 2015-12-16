@@ -83,10 +83,10 @@ def complete_word(view, edit, do_previous):
         # But don't count it if we have just found our starting place.
         num_chars_added = 0
         if compare_word.startswith(word) and compare_word_region.begin() != view.word(view.sel()[0]).begin():
+            view.add_regions(REGION_KEY, [compare_word_region], "error", "", DRAW_FLAGS)
             # replace word
             view.replace(edit, initial_word_region, compare_word)
             num_chars_added = compare_word_region.size() - initial_word_region.size()
-            view.add_regions(REGION_KEY, [compare_word_region], "error", "", DRAW_FLAGS)
 
             match_found = True
 
